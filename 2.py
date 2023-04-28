@@ -1,50 +1,37 @@
 import paramiko
 import time
 import json
-from datetime import datetime
 
-# SSH connection parameters
+# SSH connection details
 ip_address = "192.168.1.1"
-port = 22
 username = "root"
 password = "Password123"
 
+# Log file name
+current_date = time.strftime("%d_%m_%Y")
+log_file_name = f"attached_devices_{current_date}.txt"
+
 # Command to get attached devices
-cmd = 'ubus call devwatchd.device get_attached_devices \'{"type": "wired"}\''
+cmd = "ubus call devwatchd.device get_attached_devices '{\"type\" : \"wired\"}'"
 
-# Interval to get attached devices in seconds
-interval = 10
+# Create SSH client
+client = paramiko.SSHClient()
+client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+client.connect(ip_address, username=username, password=password)
 
-# Function to execute SSH command and return output
-def run_command_ssh(ip_address, port, username, password, cmd):
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(ip_address, port, username, password)
-    stdin, stdout, stderr = ssh.exec_command(cmd)
-    output = stdout.read().decode('utf-8')
-    ssh.close()
-    return output.strip()
+# Open log file
+with open(log_file_name, "a") as f:
+    f.write(f"Attached devices log at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-# Function to get attached devices and write to file
-def log_attached_devices():
-    while True:
-        # Get current time and date
-        now = datetime.now()
-        current_time = now.strftime("%H:%M:%S")
-        current_date = now.strftime("%d_%m_%Y")
+    # Execute command to get attached devices
+    stdin, stdout, stderr = client.exec_command(cmd)
 
-        # Get attached devices and convert to JSON format
-        devices_output = run_command_ssh(ip_address, port, username, password, cmd)
-        attached_devices = json.loads(devices_output)
+    # Parse and write attached devices to log file
+    attached_devices = json.loads(stdout.read().decode())
+    for device in attached_devices:
+        f.write(f"{device['hostname']}, {device['mac']}\n")
 
-        # Write attached devices to file
-        with open(f'attached_devices_logs_{current_date}.txt', 'a') as log_file:
-            log_file.write(f'Attached devices at {current_time}:\n')
-            for device in attached_devices:
-                log_file.write(f'{device["name"]}, MAC Address: {device["mac"]}\n')
+    f.write("\n")
 
-        # Wait for specified interval
-        time.sleep(interval)
-
-# Call log_attached_devices function
-log_attached_devices()
+# Close SSH connection
+client.close()
